@@ -71,6 +71,11 @@ interface DataErasureRequestParams {
   securityAnswer: string
 }
 
+const isPathInside = (parent: string, child: string): boolean => {
+  const relative = path.relative(parent, child)
+  return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative)
+}
+
 router.post('/', (req: Request<Record<string, unknown>, Record<string, unknown>, DataErasureRequestParams>, res: Response, next: NextFunction): void => {
   void (async () => {
     const loggedInUser = security.authenticatedUsers.get(req.cookies.token)
@@ -101,8 +106,22 @@ router.post('/', (req: Request<Record<string, unknown>, Record<string, unknown>,
       }
 
       if (req.body.layout) {
-        const filePath: string = path.resolve(req.body.layout).toLowerCase()
-        const isForbiddenFile: boolean = (filePath.includes('ftp') || filePath.includes('ctf.key') || filePath.includes('encryptionkeys'))
+        const viewsPath = path.resolve(__dirname, '../views')
+        let isForbiddenFile = true
+
+        if (typeof req.body.layout === 'string') {
+          const resolvedDirect = path.resolve(req.body.layout)
+          const resolvedFromViews = path.resolve(viewsPath, req.body.layout)
+          const isDirectInViews = isPathInside(viewsPath, resolvedDirect)
+          const isFromViewsInViews = isPathInside(viewsPath, resolvedFromViews)
+
+          if (isDirectInViews || isFromViewsInViews) {
+            const targetPath = isDirectInViews ? resolvedDirect : resolvedFromViews
+            const filePath = targetPath.toLowerCase()
+            isForbiddenFile = (filePath.includes('ftp') || filePath.includes('ctf.key') || filePath.includes('encryptionkeys'))
+          }
+        }
+
         if (!isForbiddenFile) {
           res.render('dataErasureResult', {
             ...req.body,
